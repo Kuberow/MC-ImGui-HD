@@ -9,8 +9,8 @@ local imgui = {
     },
     frames = {},
     scale = 1,
-    cellWidth = 4,
-    cellHeight = 6,
+    cellWidth = 6,
+    cellHeight = 9,
     graphics = false,
     pixelMode = false,
     originX = 0,
@@ -112,7 +112,7 @@ local function pixelRect(x, y, width, height, colour)
             for px = x, x + width - 1 do imgui.canvas.drawPixel(px, py, colour) end
         end
     elseif imgui.canvas.drawPixels then
-        imgui.canvas.drawPixels(x, y, width, height, colour)
+        imgui.canvas.drawPixels(x, y, colour, width, height)
     end
 end
 
@@ -123,7 +123,7 @@ local function cellRect(x, y, width, height, colour)
         imgui.canvas.write((" "):rep(math.max(0, width)))
         return
     end
-    pixelRect((x + imgui.originX - 1) * imgui.cellWidth + 1, (y + imgui.originY - 1) * imgui.cellHeight + 1, width * imgui.cellWidth, height * imgui.cellHeight, colour)
+    pixelRect((x + imgui.originX - 1) * imgui.cellWidth, (y + imgui.originY - 1) * imgui.cellHeight, width * imgui.cellWidth, height * imgui.cellHeight, colour)
 end
 
 local function text(x, y, value, colour)
@@ -143,7 +143,7 @@ local function text(x, y, value, colour)
             local line = bitmap[row]
             for column = 1, 3 do
                 if line:sub(column, column) == "1" then
-                    pixelRect((x - 1) * imgui.cellWidth + (index - 1) * imgui.cellWidth + (column - 1) * s + 1, (y - 1) * imgui.cellHeight + (row - 1) * s + 1, s, s, colour)
+                    pixelRect((x - 1) * imgui.cellWidth + (index - 1) * imgui.cellWidth + (column - 1) * s, (y - 1) * imgui.cellHeight + (row - 1) * s, s, s, colour)
                 end
             end
         end
@@ -214,8 +214,8 @@ function imgui.init(win, parent)
         imgui.canvas.setGraphicsMode(1)
         imgui.graphics = true
     end
-    if imgui.pixelMode and imgui.canvas.getPixelSize then
-        local pixelWidth, pixelHeight = imgui.canvas.getPixelSize()
+    if imgui.pixelMode and imgui.canvas.getSize then
+        local pixelWidth, pixelHeight = imgui.canvas.getSize(1)
         imgui.termSize = {math.floor(pixelWidth / imgui.cellWidth), math.floor(pixelHeight / imgui.cellHeight)}
     else
         imgui.termSize = {imgui.canvas.getSize()}
