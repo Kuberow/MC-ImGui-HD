@@ -145,7 +145,7 @@ local function flushPixels()
             end
         end
     end
-    imgui.frontBuffer = imgui.backBuffer
+    imgui.frontBuffer, imgui.backBuffer = imgui.backBuffer, imgui.frontBuffer
 end
 
 local function frameOutline(frame, width, height, colour)
