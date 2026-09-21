@@ -212,7 +212,8 @@ imgui.objects = {}
 function imgui.objects.button(tbl)
     local button = {x = tbl.x, y = tbl.y, label = tbl.label, id = tbl.id}
     function button.event(ev, parent)
-        if ev[1] == "mouse_click" and ev[4] >= parent.position.y + button.y and ev[4] < parent.position.y + button.y + 1 then
+        local row = parent.position.y + button.y + 1
+        if ev[1] == "mouse_click" and ev[4] >= row and ev[4] < row + 1 then
             local left = parent.position.x + button.x
             if ev[3] >= left and ev[3] < left + #button.label then
                 return {type = "button_click", mouseButton = ev[2], id = button.id}
@@ -248,7 +249,7 @@ function imgui.objects.textbox(tbl)
     function box.event(ev, parent)
         if ev[1] == "mouse_click" then
             local left = parent.position.x + box.x
-            local top = parent.position.y + box.y
+            local top = parent.position.y + box.y + 1
             box.typing = ev[4] >= top and ev[4] < top + 1 and ev[3] >= left and ev[3] < left + box.width
         elseif ev[1] == "key" and box.typing then
             if ev[2] == keys.enter then return {type = "textbox_enter", text = box.text, id = box.id}
