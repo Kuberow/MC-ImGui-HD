@@ -110,13 +110,15 @@ glyphs = compactFont
 local function pixelRect(x, y, width, height, colour)
     if width <= 0 or height <= 0 then return end
     if imgui.drawing then
-        local left = math.max(0, x)
-        local top = math.max(0, y)
-        local right = math.min(imgui.pixelWidth, x + width)
-        local bottom = math.min(imgui.pixelHeight, y + height)
+        local left = math.max(0, math.floor(x))
+        local top = math.max(0, math.floor(y))
+        local right = math.min(imgui.pixelWidth, math.ceil(x + width))
+        local bottom = math.min(imgui.pixelHeight, math.ceil(y + height))
         for py = top, bottom - 1 do
             local row = imgui.backBuffer[py]
-            for px = left, right - 1 do row[px] = colour end
+            if row then
+                for px = left, right - 1 do row[px] = colour end
+            end
         end
     elseif imgui.canvas.setPixel then
         for py = y, y + height - 1 do
@@ -129,6 +131,7 @@ local function flushPixels()
     for y = 0, imgui.pixelHeight - 1 do
         local oldRow = imgui.frontBuffer[y]
         local newRow = imgui.backBuffer[y]
+        if not oldRow or not newRow then goto nextRow end
         local x = 0
         while x < imgui.pixelWidth do
             if oldRow[x] == newRow[x] then
@@ -144,16 +147,16 @@ local function flushPixels()
                 end
             end
         end
+        ::nextRow::
     end
     imgui.frontBuffer, imgui.backBuffer = imgui.backBuffer, imgui.frontBuffer
 end
 
 local function frameOutline(frame, width, height, colour)
     local left = (frame.position.x - 1) * imgui.cellWidth
-    local top = (frame.position.y - 1) * imgui.cellHeight
+    local top = (frame.position.y - 1) * imgui.cellHeight + imgui.cellHeight
     local right = left + width * imgui.cellWidth - 2
-    local bottom = top + height * imgui.cellHeight - 2
-    pixelRect(left, top, right - left + 2, 2, colour)
+    local bottom = (frame.position.y - 1) * imgui.cellHeight + height * imgui.cellHeight - 2
     pixelRect(left, bottom, right - left + 2, 2, colour)
     pixelRect(left, top, 2, bottom - top + 2, colour)
     pixelRect(right, top, 2, bottom - top + 2, colour)
@@ -343,7 +346,9 @@ function imgui.render()
     else
         for y = 0, imgui.pixelHeight - 1 do
             local row = imgui.backBuffer[y]
-            for x = 0, imgui.pixelWidth - 1 do row[x] = imgui.style.background end
+            if row then
+                for x = 0, imgui.pixelWidth - 1 do row[x] = imgui.style.background end
+            end
         end
         imgui.drawing = true
     end
