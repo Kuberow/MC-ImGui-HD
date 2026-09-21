@@ -324,8 +324,10 @@ function imgui.createFrame(name, x, y, width, height)
             if ev[3] == frame.position.x then frame.setMaximised(not frame.style.maximised)
             else frame.hold.offset = ev[3] - frame.position.x; frame.holded = true end
         elseif ev[1] == "mouse_drag" and frame.holded then
-            frame.position.x = ev[3] - frame.hold.offset
-            frame.position.y = ev[4]
+            local maxX = math.max(1, imgui.termSize[1] - width + 1)
+            local maxY = math.max(1, imgui.termSize[2] - height + 1)
+            frame.position.x = math.max(1, math.min(maxX, ev[3] - frame.hold.offset))
+            frame.position.y = math.max(1, math.min(maxY, ev[4]))
         elseif ev[1] == "mouse_up" then frame.holded = false end
         if not frame.style.maximised then return end
         local events = {}
