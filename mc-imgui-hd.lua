@@ -150,12 +150,23 @@ local function text(x, y, value, colour)
     end
 end
 
+local function eventPosition(ev)
+    if (ev[1] == "mouse_click" or ev[1] == "mouse_drag" or ev[1] == "mouse_up") and imgui.pixelMode then
+        local x, y = ev[3], ev[4]
+        if x > imgui.termSize[1] or y > imgui.termSize[2] then
+            local normalized = {ev[1], ev[2], math.floor(x / imgui.cellWidth) + 1, math.floor(y / imgui.cellHeight) + 1}
+            return normalized
+        end
+    end
+    return ev
+end
+
 imgui.objects = {}
 
 function imgui.objects.button(tbl)
     local button = {x = tbl.x, y = tbl.y, label = tbl.label, id = tbl.id}
     function button.event(ev, parent)
-        if ev[1] == "mouse_click" and ev[4] == parent.position.y + button.y then
+        if ev[1] == "mouse_click" and ev[4] >= parent.position.y + button.y and ev[4] < parent.position.y + button.y + 1 then
             local left = parent.position.x + button.x
             if ev[3] >= left and ev[3] < left + #button.label then
                 return {type = "button_click", mouseButton = ev[2], id = button.id}
@@ -191,7 +202,8 @@ function imgui.objects.textbox(tbl)
     function box.event(ev, parent)
         if ev[1] == "mouse_click" then
             local left = parent.position.x + box.x
-            box.typing = ev[4] == parent.position.y + box.y and ev[3] >= left and ev[3] < left + math.max(#box.text, #box.placeholder)
+            local top = parent.position.y + box.y
+            box.typing = ev[4] >= top and ev[4] < top + 1 and ev[3] >= left and ev[3] < left + box.width
         elseif ev[1] == "key" and box.typing then
             if ev[2] == keys.enter then return {type = "textbox_enter", text = box.text, id = box.id}
             elseif ev[2] == keys.backspace then box.text = box.text:sub(1, -2) end
@@ -239,11 +251,15 @@ function imgui.createFrame(name, x, y, width, height)
         if not frame.style.maximised then return end
         imgui.originX, imgui.originY = frame.position.x - 1, frame.position.y - 1
         cellRect(1, 2, width, height - 1, imgui.style.background)
+        cellRect(1, height, width, 1, imgui.style.secondary)
+        cellRect(1, 2, 1, height - 2, imgui.style.secondary)
+        cellRect(width, 2, 1, height - 2, imgui.style.secondary)
         for index = 1, #frame.elements do frame.elements[index].render() end
         imgui.originX, imgui.originY = 0, 0
     end
     function frame.processEvent(ev)
-        if ev[1] == "mouse_click" and ev[4] == frame.position.y and ev[3] >= frame.position.x and ev[3] < frame.position.x + width then
+        ev = eventPosition(ev)
+        if ev[1] == "mouse_click" and ev[4] >= frame.position.y and ev[4] < frame.position.y + 1 and ev[3] >= frame.position.x and ev[3] < frame.position.x + width then
             if ev[3] == frame.position.x then frame.setMaximised(not frame.style.maximised)
             else frame.hold.offset = ev[3] - frame.position.x; frame.holded = true end
         elseif ev[1] == "mouse_drag" and frame.holded then
@@ -271,6 +287,7 @@ function imgui.render()
 end
 
 function imgui.getEvents(ev)
+    ev = eventPosition(ev)
     local events = {}
     for index = 1, #imgui.frames do
         local frame = imgui.frames[index]
