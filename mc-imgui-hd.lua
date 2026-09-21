@@ -12,6 +12,7 @@ local imgui = {
     cellWidth = 4,
     cellHeight = 6,
     graphics = false,
+    pixelMode = false,
     originX = 0,
     originY = 0,
 }
@@ -79,6 +80,10 @@ local compactFont = {
     ["6"] = {"011", "100", "111", "101", "111"}, ["7"] = {"111", "001", "010", "010", "010"},
     ["8"] = {"111", "101", "111", "101", "111"}, ["9"] = {"111", "101", "111", "001", "110"},
     [":"] = {"000", "010", "000", "010", "000"}, ["-"] = {"000", "000", "111", "000", "000"},
+    ["."] = {"000", "000", "000", "000", "010"}, [","] = {"000", "000", "000", "010", "100"},
+    ["/"] = {"001", "001", "010", "100", "100"}, ["'"] = {"010", "010", "000", "000", "000"},
+    ["("] = {"001", "010", "010", "010", "001"}, [")"] = {"100", "010", "010", "010", "100"},
+    ["_"] = {"000", "000", "000", "000", "111"},
     A = {"010", "101", "111", "101", "101"}, B = {"110", "101", "110", "101", "110"},
     C = {"011", "100", "100", "100", "011"}, D = {"110", "101", "101", "101", "110"},
     E = {"111", "100", "110", "100", "111"}, F = {"111", "100", "110", "100", "100"},
@@ -102,16 +107,32 @@ local function pixelRect(x, y, width, height, colour)
         for py = y, y + height - 1 do
             for px = x, x + width - 1 do imgui.canvas.setPixel(px, py, colour) end
         end
+    elseif imgui.canvas.drawPixel then
+        for py = y, y + height - 1 do
+            for px = x, x + width - 1 do imgui.canvas.drawPixel(px, py, colour) end
+        end
     elseif imgui.canvas.drawPixels then
         imgui.canvas.drawPixels(x, y, width, height, colour)
     end
 end
 
 local function cellRect(x, y, width, height, colour)
+    if not imgui.pixelMode then
+        imgui.canvas.setCursorPos(x + imgui.originX, y + imgui.originY)
+        imgui.canvas.setBackgroundColor(colour)
+        imgui.canvas.write((" "):rep(math.max(0, width)))
+        return
+    end
     pixelRect((x + imgui.originX - 1) * imgui.cellWidth + 1, (y + imgui.originY - 1) * imgui.cellHeight + 1, width * imgui.cellWidth, height * imgui.cellHeight, colour)
 end
 
 local function text(x, y, value, colour)
+    if not imgui.pixelMode then
+        imgui.canvas.setCursorPos(x + imgui.originX, y + imgui.originY)
+        imgui.canvas.setTextColor(colour)
+        imgui.canvas.write(tostring(value))
+        return
+    end
     local s = imgui.scale
     x = x + imgui.originX
     y = y + imgui.originY
@@ -158,7 +179,15 @@ function imgui.objects.label(tbl)
 end
 
 function imgui.objects.textbox(tbl)
-    local box = {x = tbl.x, y = tbl.y, placeholder = tbl.placeholder or "", text = "", id = tbl.id, typing = false}
+    local box = {
+        x = tbl.x,
+        y = tbl.y,
+        width = tbl.width or math.max(#(tbl.placeholder or ""), 16),
+        placeholder = tbl.placeholder or "",
+        text = "",
+        id = tbl.id,
+        typing = false,
+    }
     function box.event(ev, parent)
         if ev[1] == "mouse_click" then
             local left = parent.position.x + box.x
@@ -170,7 +199,7 @@ function imgui.objects.textbox(tbl)
     end
     function box.render()
         local value = #box.text > 0 and box.text or box.placeholder
-        cellRect(box.x, box.y + 1, math.max(#value, 1), 1, box.typing and imgui.style.primary or imgui.style.secondary)
+        cellRect(box.x, box.y + 1, box.width, 1, box.typing and imgui.style.primary or imgui.style.secondary)
         text(box.x, box.y + 1, value, imgui.style.text)
     end
     return box
@@ -180,11 +209,17 @@ function imgui.init(win, parent)
     imgui.canvas = parent or win or term.current()
     imgui.window = win or imgui.canvas
     imgui.parent = parent or imgui.canvas
-    if imgui.canvas.setGraphicsMode then
+    imgui.pixelMode = imgui.canvas.setPixel or imgui.canvas.drawPixel or imgui.canvas.drawPixels
+    if imgui.pixelMode and imgui.canvas.setGraphicsMode then
         imgui.canvas.setGraphicsMode(1)
         imgui.graphics = true
     end
-    imgui.termSize = {imgui.canvas.getSize()}
+    if imgui.pixelMode and imgui.canvas.getPixelSize then
+        local pixelWidth, pixelHeight = imgui.canvas.getPixelSize()
+        imgui.termSize = {math.floor(pixelWidth / imgui.cellWidth), math.floor(pixelHeight / imgui.cellHeight)}
+    else
+        imgui.termSize = {imgui.canvas.getSize()}
+    end
 end
 
 function imgui.setStyle(style)
