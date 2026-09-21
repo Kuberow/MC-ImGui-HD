@@ -15,3 +15,7 @@ imgui.init(window.create(term.current(), 1, 1, term.getSize()), term.current())
 The module enables graphics mode when the terminal provides it and uses
 `drawPixels` for filled rectangles. The original `mc-imgui.lua` remains
 available for standard ComputerCraft terminals.
+
+HD frames are buffered and only changed pixel runs are sent to the terminal.
+Clicking a frame brings it to the front. Click the left edge of a title bar to
+minimize or restore its body, and drag the rest of the title bar to move it.

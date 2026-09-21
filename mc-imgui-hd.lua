@@ -13,6 +13,12 @@ local imgui = {
     cellHeight = 9,
     graphics = false,
     pixelMode = false,
+    pixelWidth = 0,
+    pixelHeight = 0,
+    frontBuffer = nil,
+    backBuffer = nil,
+    activeFrame = nil,
+    drawing = false,
     originX = 0,
     originY = 0,
 }
@@ -103,17 +109,54 @@ glyphs = compactFont
 
 local function pixelRect(x, y, width, height, colour)
     if width <= 0 or height <= 0 then return end
-    if imgui.canvas.setPixel then
+    if imgui.drawing then
+        local left = math.max(0, x)
+        local top = math.max(0, y)
+        local right = math.min(imgui.pixelWidth, x + width)
+        local bottom = math.min(imgui.pixelHeight, y + height)
+        for py = top, bottom - 1 do
+            local row = imgui.backBuffer[py]
+            for px = left, right - 1 do row[px] = colour end
+        end
+    elseif imgui.canvas.setPixel then
         for py = y, y + height - 1 do
             for px = x, x + width - 1 do imgui.canvas.setPixel(px, py, colour) end
         end
-    elseif imgui.canvas.drawPixel then
-        for py = y, y + height - 1 do
-            for px = x, x + width - 1 do imgui.canvas.drawPixel(px, py, colour) end
-        end
-    elseif imgui.canvas.drawPixels then
-        imgui.canvas.drawPixels(x, y, colour, width, height)
     end
+end
+
+local function flushPixels()
+    for y = 0, imgui.pixelHeight - 1 do
+        local oldRow = imgui.frontBuffer[y]
+        local newRow = imgui.backBuffer[y]
+        local x = 0
+        while x < imgui.pixelWidth do
+            if oldRow[x] == newRow[x] then
+                x = x + 1
+            else
+                local colour = newRow[x]
+                local start = x
+                repeat x = x + 1 until x >= imgui.pixelWidth or oldRow[x] == newRow[x] or newRow[x] ~= colour
+                if imgui.canvas.drawPixels then
+                    imgui.canvas.drawPixels(start, y, colour, x - start, 1)
+                else
+                    for px = start, x - 1 do imgui.canvas.setPixel(px, y, colour) end
+                end
+            end
+        end
+    end
+    imgui.frontBuffer = imgui.backBuffer
+end
+
+local function frameOutline(frame, width, height, colour)
+    local left = (frame.position.x - 1) * imgui.cellWidth
+    local top = (frame.position.y - 1) * imgui.cellHeight
+    local right = left + width * imgui.cellWidth - 2
+    local bottom = top + height * imgui.cellHeight - 2
+    pixelRect(left, top, right - left + 2, 2, colour)
+    pixelRect(left, bottom, right - left + 2, 2, colour)
+    pixelRect(left, top, 2, bottom - top + 2, colour)
+    pixelRect(right, top, 2, bottom - top + 2, colour)
 end
 
 local function cellRect(x, y, width, height, colour)
@@ -228,7 +271,16 @@ function imgui.init(win, parent)
     end
     if imgui.pixelMode and imgui.canvas.getSize then
         local pixelWidth, pixelHeight = imgui.canvas.getSize(1)
+        imgui.pixelWidth, imgui.pixelHeight = pixelWidth, pixelHeight
         imgui.termSize = {math.floor(pixelWidth / imgui.cellWidth), math.floor(pixelHeight / imgui.cellHeight)}
+        imgui.frontBuffer, imgui.backBuffer = {}, {}
+        for y = 0, pixelHeight - 1 do
+            imgui.frontBuffer[y], imgui.backBuffer[y] = {}, {}
+            for x = 0, pixelWidth - 1 do
+                imgui.frontBuffer[y][x] = false
+                imgui.backBuffer[y][x] = imgui.style.background
+            end
+        end
     else
         imgui.termSize = {imgui.canvas.getSize()}
     end
@@ -239,27 +291,33 @@ function imgui.setStyle(style)
 end
 
 function imgui.createFrame(name, x, y, width, height)
-    local frame = {elements = {}, label = name, position = {x = x, y = y}, visible = true, hold = {}, style = {indent = true, maximised = true}}
+    local frame = {elements = {}, label = name, width = width, height = height, position = {x = x, y = y}, visible = true, hold = {}, style = {indent = true, maximised = true}, z = #imgui.frames + 1}
     function frame.setVisible(value) frame.visible = value end
     function frame.indent(value) frame.style.indent = value end
     function frame.setMaximised(value) frame.style.maximised = value end
+    function frame.minimise() frame.style.maximised = false end
+    function frame.restore() frame.style.maximised = true end
     function frame.insert(element) frame.elements[#frame.elements + 1] = element end
     function frame.render()
         imgui.originX, imgui.originY = 0, 0
-        cellRect(frame.position.x, frame.position.y, width, 1, imgui.style.primary)
+        local titleColour = frame == imgui.activeFrame and imgui.style.primary or imgui.style.secondary
+        cellRect(frame.position.x, frame.position.y, width, 1, titleColour)
         text(frame.position.x, frame.position.y, name, imgui.style.text)
         if not frame.style.maximised then return end
         imgui.originX, imgui.originY = frame.position.x - 1, frame.position.y - 1
         cellRect(1, 2, width, height - 1, imgui.style.background)
-        cellRect(1, height, width, 1, imgui.style.secondary)
-        cellRect(1, 2, 1, height - 2, imgui.style.secondary)
-        cellRect(width, 2, 1, height - 2, imgui.style.secondary)
+        frameOutline(frame, width, height, imgui.style.secondary)
         for index = 1, #frame.elements do frame.elements[index].render() end
         imgui.originX, imgui.originY = 0, 0
     end
     function frame.processEvent(ev)
         ev = eventPosition(ev)
         if ev[1] == "mouse_click" and ev[4] >= frame.position.y and ev[4] < frame.position.y + 1 and ev[3] >= frame.position.x and ev[3] < frame.position.x + width then
+            imgui.activeFrame = frame
+            for index = #imgui.frames, 1, -1 do
+                if imgui.frames[index] == frame then table.remove(imgui.frames, index) break end
+            end
+            imgui.frames[#imgui.frames + 1] = frame
             if ev[3] == frame.position.x then frame.setMaximised(not frame.style.maximised)
             else frame.hold.offset = ev[3] - frame.position.x; frame.holded = true end
         elseif ev[1] == "mouse_drag" and frame.holded then
@@ -275,27 +333,43 @@ function imgui.createFrame(name, x, y, width, height)
         return events
     end
     imgui.frames[#imgui.frames + 1] = frame
+    imgui.activeFrame = frame
     return frame
 end
 
 function imgui.render()
-    cellRect(1, 1, imgui.termSize[1], imgui.termSize[2], imgui.style.background)
+    if not imgui.pixelMode then
+        cellRect(1, 1, imgui.termSize[1], imgui.termSize[2], imgui.style.background)
+    else
+        for y = 0, imgui.pixelHeight - 1 do
+            local row = imgui.backBuffer[y]
+            for x = 0, imgui.pixelWidth - 1 do row[x] = imgui.style.background end
+        end
+        imgui.drawing = true
+    end
     for index = 1, #imgui.frames do
         local frame = imgui.frames[index]
         if frame.visible then frame.render() end
+    end
+    if imgui.pixelMode then
+        imgui.drawing = false
+        flushPixels()
     end
 end
 
 function imgui.getEvents(ev)
     ev = eventPosition(ev)
     local events = {}
-    for index = 1, #imgui.frames do
+    for index = #imgui.frames, 1, -1 do
         local frame = imgui.frames[index]
         if frame.visible then
             local frameEvents = frame.processEvent(ev) or {}
             for eventIndex = 1, #frameEvents do
                 frameEvents[eventIndex].frameLabel = frame.label
                 events[#events + 1] = frameEvents[eventIndex]
+            end
+            if ev[1] == "mouse_click" and ev[3] >= frame.position.x and ev[3] < frame.position.x + frame.width and ev[4] >= frame.position.y and ev[4] < frame.position.y + frame.height then
+                break
             end
         end
     end
