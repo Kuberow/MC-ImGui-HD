@@ -1,4 +1,4 @@
-local imgui = require("mc-imgui")
+local imgui = require("mc-imgui-hd")
 
 local oTerm = term.current()
 
